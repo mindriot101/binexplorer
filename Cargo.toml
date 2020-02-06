@@ -1,0 +1,14 @@
+[package]
+name = "binexplorer"
+version = "0.1.0"
+authors = ["Simon Walker <s.r.walker101@googlemail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+byteorder = "1.3.2"
+tui = { version = "0.8", default-features = false, features = ["crossterm"] }
+crossterm = "0.15.0"
+structopt = "0.3.9"
+anyhow = "1.0.26"
