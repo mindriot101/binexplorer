@@ -54,6 +54,12 @@ enum ParseChar {
     I8,
     U8,
     Bool,
+    I16,
+    U16,
+    I32,
+    U32,
+    I64,
+    U64,
 }
 
 impl TryFrom<char> for ParseChar {
@@ -62,6 +68,14 @@ impl TryFrom<char> for ParseChar {
     fn try_from(c: char) -> Result<Self, Self::Error> {
         match c {
             'b' => Ok(ParseChar::I8),
+            'B' => Ok(ParseChar::U8),
+            '?' => Ok(ParseChar::Bool),
+            'h' => Ok(ParseChar::I16),
+            'H' => Ok(ParseChar::U16),
+            'i' => Ok(ParseChar::I32),
+            'I' => Ok(ParseChar::U32),
+            'l' => Ok(ParseChar::I64),
+            'L' => Ok(ParseChar::U64),
             _ => Err(anyhow!("invalid char {}", c)),
         }
     }
