@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{stdout, Read, Write};
 use std::path::PathBuf;
@@ -5,7 +6,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{anyhow, Error, Result};
 use crossterm::{
     event::{self, Event as CEvent, KeyCode},
     execute,
@@ -16,7 +17,7 @@ use structopt::StructOpt;
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::*;
 use tui::{
-    backend::CrosstermBackend,
+    backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
     Terminal,
 };
@@ -48,6 +49,66 @@ impl Drop for RawMode {
     }
 }
 
+#[derive(Debug)]
+enum ParseChar {
+    I8,
+    U8,
+    Bool,
+}
+
+impl TryFrom<char> for ParseChar {
+    type Error = Error;
+
+    fn try_from(c: char) -> Result<Self, Self::Error> {
+        match c {
+            'b' => Ok(ParseChar::I8),
+            _ => Err(anyhow!("invalid char {}", c)),
+        }
+    }
+}
+
+struct BinExplorer {
+    instructions: String,
+    should_quit: bool,
+}
+
+impl BinExplorer {
+    fn new() -> Self {
+        Self {
+            instructions: String::new(),
+            should_quit: false,
+        }
+    }
+
+    fn handle_key(&mut self, key: char) {
+        if let Ok(ins) = ParseChar::try_from(key) {
+            todo!("{:?}", ins);
+        }
+    }
+
+    fn render_parsed<B: Backend>(
+        &mut self,
+        mut f: &mut tui::terminal::Frame<'_, B>,
+        chunk: tui::layout::Rect,
+    ) {
+        SelectableList::default()
+            .block(Block::default().title("Output").borders(Borders::ALL))
+            .items(&["a", "b", "c"])
+            .select(Some(1))
+            .style(Style::default().fg(Color::White))
+            .highlight_style(Style::default().modifier(Modifier::ITALIC))
+            .highlight_symbol(">>")
+            .render(&mut f, chunk);
+    }
+
+    // fn render_editor(&mut self) {
+    //     Block::default()
+    //         .title("Editor")
+    //         .borders(Borders::ALL)
+    //         .render(&mut f, chunks[2]);
+    // }
+}
+
 fn main() -> Result<()> {
     let opts = Opts::from_args();
 
@@ -63,8 +124,6 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
 
-    terminal.clear()?;
-
     let (tx, rx) = mpsc::channel();
 
     thread::spawn(move || loop {
@@ -76,6 +135,10 @@ fn main() -> Result<()> {
 
         tx.send(Event::Tick).unwrap();
     });
+
+    let mut app = BinExplorer::new();
+
+    terminal.clear()?;
 
     loop {
         terminal.draw(|mut f| {
@@ -102,27 +165,31 @@ fn main() -> Result<()> {
                 .block(Block::default().title("Binary").borders(Borders::ALL))
                 .wrap(true)
                 .render(&mut f, chunks[0]);
-            SelectableList::default()
-                .block(Block::default().title("Output").borders(Borders::ALL))
-                .items(&["a", "b", "c"])
-                .select(Some(1))
-                .style(Style::default().fg(Color::White))
-                .highlight_style(Style::default().modifier(Modifier::ITALIC))
-                .highlight_symbol(">>")
-                .render(&mut f, chunks[1]);
-            Block::default()
-                .title("Editor")
-                .borders(Borders::ALL)
-                .render(&mut f, chunks[2]);
+
+            app.render_parsed(&mut f, chunks[1]);
+            // app.render_editor(&mut f, chunks[2]);
         })?;
 
         match rx.recv()? {
             Event::Input(event) => match event.code {
+                // Supported keys:
+                //
+                // - q: quit
+                // - b: i8
+                // - B: u8
+                // - ?: bool
+                // - h: i16
+                // - H: u16
+                // - i: i32
+                // - I: u32
+                // - l: i64
+                // - L: u64
                 KeyCode::Char('q') => {
-                    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                    // TODO: why does this not work? execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
                     terminal.show_cursor()?;
                     break;
                 }
+                KeyCode::Char(c) => app.handle_key(c),
                 _ => {}
             },
             Event::Tick => {}
