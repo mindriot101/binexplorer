@@ -14,15 +14,13 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use log::LevelFilter;
-use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use structopt::StructOpt;
-use tui::style::{Color, Modifier, Style};
 use tui::widgets::*;
 use tui::{
-    backend::{Backend, CrosstermBackend},
+    backend::{self, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
     Terminal,
 };
@@ -35,7 +33,6 @@ struct Opts {
 
 enum Event<I> {
     Input(I),
-    // Tick,
 }
 
 /// RAII wrapper around setting raw mode
@@ -82,7 +79,6 @@ impl ParseChar {
             ParseChar::U32 => Ok(format!("{}", buf.read_u32::<NativeEndian>()?)),
             ParseChar::I64 => Ok(format!("{}", buf.read_i64::<NativeEndian>()?)),
             ParseChar::U64 => Ok(format!("{}", buf.read_u64::<NativeEndian>()?)),
-            _ => Ok("".to_string()),
         }
     }
 }
@@ -153,7 +149,7 @@ impl<'a> BinExplorer<'a> {
         }
     }
 
-    fn render_raw<B: Backend>(
+    fn render_raw<B: backend::Backend>(
         &mut self,
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
@@ -176,7 +172,7 @@ impl<'a> BinExplorer<'a> {
             .render(&mut f, chunk);
     }
 
-    fn render_parsed<B: Backend>(
+    fn render_parsed<B: backend::Backend>(
         &mut self,
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
@@ -191,7 +187,7 @@ impl<'a> BinExplorer<'a> {
             .render(&mut f, chunk);
     }
 
-    fn render_editor<B: Backend>(
+    fn render_editor<B: backend::Backend>(
         &mut self,
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
@@ -265,8 +261,6 @@ fn main() -> Result<()> {
                 tx.send(Event::Input(key)).unwrap();
             }
         }
-
-        // tx.send(Event::Tick).unwrap();
     });
 
     let mut app = BinExplorer::new(&buf);
@@ -296,7 +290,7 @@ fn main() -> Result<()> {
         match rx.recv()? {
             Event::Input(event) => match event.code {
                 KeyCode::Char('q') => {
-                    // TODO: why does this not work? execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
                     terminal.show_cursor()?;
                     break;
                 }
@@ -304,7 +298,6 @@ fn main() -> Result<()> {
                 KeyCode::Backspace => app.handle_backspace(),
                 _ => {}
             },
-            // Event::Tick => {}
         }
     }
 
