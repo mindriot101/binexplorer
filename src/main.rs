@@ -1,12 +1,13 @@
 use std::convert::TryFrom;
 use std::fs::File;
-use std::io::{stdout, Read, Write};
+use std::io::{stdout, Cursor, Read, Write};
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
 use anyhow::{anyhow, Error, Result};
+use byteorder::{NativeEndian, ReadBytesExt};
 use crossterm::{
     event::{self, Event as CEvent, KeyCode},
     execute,
@@ -35,7 +36,7 @@ struct Opts {
 
 enum Event<I> {
     Input(I),
-    Tick,
+    // Tick,
 }
 
 /// RAII wrapper around setting raw mode
@@ -65,6 +66,26 @@ enum ParseChar {
     U32,
     I64,
     U64,
+}
+
+impl ParseChar {
+    fn take_from<R>(&self, mut buf: R) -> Result<String>
+    where
+        R: ReadBytesExt,
+    {
+        match *self {
+            ParseChar::I8 => Ok(format!("{}", buf.read_i8()?)),
+            ParseChar::U8 => Ok(format!("{}", buf.read_u8()?)),
+            ParseChar::Bool => Ok(format!("{}", buf.read_u8()?)),
+            ParseChar::I16 => Ok(format!("{}", buf.read_i16::<NativeEndian>()?)),
+            ParseChar::U16 => Ok(format!("{}", buf.read_u16::<NativeEndian>()?)),
+            ParseChar::I32 => Ok(format!("{}", buf.read_i32::<NativeEndian>()?)),
+            ParseChar::U32 => Ok(format!("{}", buf.read_u32::<NativeEndian>()?)),
+            ParseChar::I64 => Ok(format!("{}", buf.read_i64::<NativeEndian>()?)),
+            ParseChar::U64 => Ok(format!("{}", buf.read_u64::<NativeEndian>()?)),
+            _ => Ok("".to_string()),
+        }
+    }
 }
 
 impl TryFrom<char> for ParseChar {
@@ -102,26 +123,32 @@ impl From<&ParseChar> for char {
     }
 }
 
-struct BinExplorer {
+#[derive(Debug)]
+struct BinExplorer<'a> {
+    buffer: &'a [u8],
     instructions: Vec<ParseChar>,
     should_quit: bool,
 }
 
-impl BinExplorer {
-    fn new() -> Self {
+impl<'a> BinExplorer<'a> {
+    fn new(buffer: &'a [u8]) -> Self {
         Self {
+            buffer,
             instructions: Vec::new(),
             should_quit: false,
         }
     }
 
     fn handle_key(&mut self, key: char) {
+        log::debug!("key {} pressed", key);
         if let Ok(ins) = ParseChar::try_from(key) {
+            log::debug!("key parse ok: {:?}", ins);
             self.instructions.push(ins);
         }
     }
 
     fn handle_backspace(&mut self) {
+        log::debug!("backspace pressed");
         if !self.instructions.is_empty() {
             self.instructions.pop();
         }
@@ -132,13 +159,13 @@ impl BinExplorer {
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
     ) {
-        SelectableList::default()
+        let s = self.parsed_string();
+        log::debug!("rendering parsed string: {:?}", s);
+        let text = [Text::raw(s)];
+
+        Paragraph::new(text.iter())
+            .wrap(true)
             .block(Block::default().title("Output").borders(Borders::ALL))
-            .items(&["a", "b", "c"])
-            .select(Some(1))
-            .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().modifier(Modifier::ITALIC))
-            .highlight_symbol(">>")
             .render(&mut f, chunk);
     }
 
@@ -147,11 +174,22 @@ impl BinExplorer {
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
     ) {
-        let text = [Text::raw(self.instructions_string())];
+        let s = self.instructions_string();
+        log::debug!("rendering instructions string: {:?}", s);
+        let text = [Text::raw(s)];
 
         Paragraph::new(text.iter())
+            .wrap(true)
             .block(Block::default().title("Editor").borders(Borders::ALL))
             .render(&mut f, chunk);
+    }
+
+    fn parsed_string(&self) -> String {
+        let mut cursor = Cursor::new(self.buffer);
+        self.instructions
+            .iter()
+            .map(|i| i.take_from(&mut cursor).unwrap())
+            .join(" ")
     }
 
     fn instructions_string(&self) -> String {
@@ -169,7 +207,7 @@ fn main() -> Result<()> {
 
     let config = Config::builder()
         .appender(Appender::builder().build("requests", Box::new(requests)))
-        .logger(Logger::builder().build("binexplorer", LevelFilter::Info))
+        .logger(Logger::builder().build("binexplorer", LevelFilter::Debug))
         .build(
             Root::builder()
                 .appender("requests")
@@ -205,10 +243,10 @@ fn main() -> Result<()> {
             }
         }
 
-        tx.send(Event::Tick).unwrap();
+        // tx.send(Event::Tick).unwrap();
     });
 
-    let mut app = BinExplorer::new();
+    let mut app = BinExplorer::new(&buf);
 
     terminal.clear()?;
 
@@ -253,7 +291,7 @@ fn main() -> Result<()> {
                 KeyCode::Backspace => app.handle_backspace(),
                 _ => {}
             },
-            Event::Tick => {}
+            // Event::Tick => {}
         }
     }
 
