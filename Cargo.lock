@@ -57,7 +57,6 @@ dependencies = [
  "anyhow",
  "byteorder",
  "crossterm 0.15.0",
- "itertools",
  "log",
  "log4rs",
  "structopt",

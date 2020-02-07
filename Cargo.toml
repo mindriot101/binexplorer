@@ -12,6 +12,5 @@ tui = { version = "0.8", default-features = false, features = ["crossterm"] }
 crossterm = "0.15.0"
 structopt = "0.3.9"
 anyhow = "1.0.26"
-itertools = "0.8.2"
 log4rs = "0.10.0"
 log = "0.4.8"

@@ -13,7 +13,6 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use itertools::Itertools;
 use log::LevelFilter;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
@@ -154,6 +153,28 @@ impl<'a> BinExplorer<'a> {
         }
     }
 
+    fn render_raw<B: Backend>(
+        &mut self,
+        mut f: &mut tui::terminal::Frame<'_, B>,
+        chunk: tui::layout::Rect,
+    ) {
+        // Render binary hex text
+        let hex_text: Vec<_> = self
+            .buffer
+            .chunks(16)
+            .map(|c| {
+                let formatted = format_binary(c);
+                Text::raw(formatted)
+            })
+            .take(10)
+            .collect();
+
+        Paragraph::new(hex_text.iter())
+            .block(Block::default().title("Binary").borders(Borders::ALL))
+            .wrap(true)
+            .render(&mut f, chunk);
+    }
+
     fn render_parsed<B: Backend>(
         &mut self,
         mut f: &mut tui::terminal::Frame<'_, B>,
@@ -189,6 +210,7 @@ impl<'a> BinExplorer<'a> {
         self.instructions
             .iter()
             .map(|i| i.take_from(&mut cursor).unwrap())
+            .collect::<Vec<String>>()
             .join(" ")
     }
 
@@ -265,17 +287,7 @@ fn main() -> Result<()> {
                 )
                 .split(f.size());
 
-            // Render binary hex text
-            let info_style = Style::default().fg(Color::White);
-            let hex_text = [
-                Text::styled(format!("Hello world"), info_style),
-                Text::styled(format!("this is a test"), info_style),
-            ];
-            Paragraph::new(hex_text.iter())
-                .block(Block::default().title("Binary").borders(Borders::ALL))
-                .wrap(true)
-                .render(&mut f, chunks[0]);
-
+            app.render_raw(&mut f, chunks[0]);
             app.render_parsed(&mut f, chunks[1]);
             app.render_editor(&mut f, chunks[2]);
         })?;
@@ -298,8 +310,8 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn format_binary(data: &[u8]) -> Result<String> {
-    let sections: String = data
+fn format_binary(data: &[u8]) -> String {
+    let mut sections: String = data
         .iter()
         .map(|x| format!("{:02x?}", x))
         .fold(Vec::new(), |mut acc, v| match acc.last_mut() {
@@ -321,11 +333,8 @@ fn format_binary(data: &[u8]) -> Result<String> {
         .map(|pair| pair.join(""))
         .collect::<Vec<_>>()
         .join(" ");
-    Ok(sections)
-}
-
-fn _split_binary_data(data: &[u8]) -> itertools::IntoChunks<std::slice::Iter<'_, u8>> {
-    data.into_iter().chunks(16)
+    sections.push_str("\n");
+    sections
 }
 
 #[cfg(test)]
@@ -335,26 +344,8 @@ mod tests {
     #[test]
     fn test_binary_representation() {
         let data = b"\x7f\x45\x4c\x46\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00";
-        let expected = "7f45 4c46 0201 0100 0000 0000 0000 0000".to_string();
+        let expected = "7f45 4c46 0201 0100 0000 0000 0000 0000\n".to_string();
 
-        assert_eq!(format_binary(data).unwrap(), expected);
+        assert_eq!(format_binary(data), expected);
     }
-
-    // #[test]
-    // #[ignore]
-    // fn test_split_binary_data() {
-    //     let data = b"\x7f\x45\x4c\x46\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x3e\x00\x01\x00\x00\x00\x30\x11\x04\x00\x00\x00\x00\x00";
-    //     let expected = vec![
-    //         b"\x7f\x45\x4c\x46\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-    //         b"\x03\x00\x3e\x00\x01\x00\x00\x00\x30\x11\x04\x00\x00\x00\x00\x00",
-    //     ];
-    //     assert_eq!(
-    //         split_binary_data(data)
-    //             .into_iter()
-    //             .map(|c| c.collect::<Vec<_>>())
-    //             .copied()
-    //             .collect::<Vec<_>>(),
-    //         expected
-    //     );
-    // }
 }
