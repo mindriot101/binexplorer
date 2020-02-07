@@ -13,6 +13,11 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
+use log::LevelFilter;
+use log4rs::append::console::ConsoleAppender;
+use log4rs::append::file::FileAppender;
+use log4rs::config::{Appender, Config, Logger, Root};
+use log4rs::encode::pattern::PatternEncoder;
 use structopt::StructOpt;
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::*;
@@ -155,6 +160,27 @@ impl BinExplorer {
 }
 
 fn main() -> Result<()> {
+    // Set up logging
+    let requests = FileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
+        .append(false)
+        .build("binexplorer.log")
+        .unwrap();
+
+    let config = Config::builder()
+        .appender(Appender::builder().build("requests", Box::new(requests)))
+        .logger(Logger::builder().build("binexplorer", LevelFilter::Info))
+        .build(
+            Root::builder()
+                .appender("requests")
+                .build(LevelFilter::Warn),
+        )
+        .unwrap();
+
+    let _handle = log4rs::init_config(config).unwrap();
+
+    log::info!("logging set up");
+
     let opts = Opts::from_args();
 
     let mut file = File::open(&opts.filename)?;
