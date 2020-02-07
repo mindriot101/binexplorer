@@ -39,6 +39,7 @@ dependencies = [
  "anyhow",
  "byteorder",
  "crossterm 0.15.0",
+ "itertools",
  "structopt",
  "tui",
 ]

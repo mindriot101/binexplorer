@@ -11,6 +11,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use itertools::Itertools;
 use structopt::StructOpt;
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::*;
@@ -45,19 +46,6 @@ impl Drop for RawMode {
     fn drop(&mut self) {
         disable_raw_mode().expect("disabling raw mode");
     }
-}
-
-fn xxd_view<'t, T>(buf: &'t [u8]) -> Paragraph<T>
-where
-    T: std::iter::Iterator<Item = &'t Text<'t>>,
-{
-    // Render binary hex text
-    let info_style = Style::default().fg(Color::White);
-    let hex_text = [
-        Text::styled(format!("Hello world"), info_style),
-        Text::styled(format!("this is a test"), info_style),
-    ];
-    Paragraph::new(hex_text.iter())
 }
 
 fn main() -> Result<()> {
@@ -104,9 +92,15 @@ fn main() -> Result<()> {
                 )
                 .split(f.size());
 
-            let left_pane = xxd_view(&buf);
-            left_pane
+            // Render binary hex text
+            let info_style = Style::default().fg(Color::White);
+            let hex_text = [
+                Text::styled(format!("Hello world"), info_style),
+                Text::styled(format!("this is a test"), info_style),
+            ];
+            Paragraph::new(hex_text.iter())
                 .block(Block::default().title("Binary").borders(Borders::ALL))
+                .wrap(true)
                 .render(&mut f, chunks[0]);
             SelectableList::default()
                 .block(Block::default().title("Output").borders(Borders::ALL))
@@ -138,4 +132,64 @@ fn main() -> Result<()> {
     disable_raw_mode()?;
 
     Ok(())
+}
+
+fn format_binary(data: &[u8]) -> Result<String> {
+    let sections: String = data
+        .iter()
+        .map(|x| format!("{:02x?}", x))
+        .fold(Vec::new(), |mut acc, v| match acc.last_mut() {
+            None => {
+                acc.push(vec![v]);
+                acc
+            }
+            Some(a) => {
+                if a.len() == 1 {
+                    a.push(v);
+                    acc
+                } else {
+                    acc.push(vec![v]);
+                    acc
+                }
+            }
+        })
+        .iter()
+        .map(|pair| pair.join(""))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Ok(sections)
+}
+
+fn split_binary_data(data: &[u8]) -> itertools::IntoChunks<std::slice::Iter<'_, u8>> {
+    data.into_iter().chunks(16)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_binary_representation() {
+        let data = b"\x7f\x45\x4c\x46\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+        let expected = "7f45 4c46 0201 0100 0000 0000 0000 0000".to_string();
+
+        assert_eq!(format_binary(data).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_split_binary_data() {
+        let data = b"\x7f\x45\x4c\x46\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x3e\x00\x01\x00\x00\x00\x30\x11\x04\x00\x00\x00\x00\x00";
+        let expected = vec![
+            b"\x7f\x45\x4c\x46\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+            b"\x03\x00\x3e\x00\x01\x00\x00\x00\x30\x11\x04\x00\x00\x00\x00\x00",
+        ];
+        assert_eq!(
+            split_binary_data(data)
+                .into_iter()
+                .map(|c| c.collect::<Vec<_>>())
+                .copied()
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
 }
