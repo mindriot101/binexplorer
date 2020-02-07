@@ -158,6 +158,7 @@ impl<'a> BinExplorer<'a> {
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
     ) {
+        let nlines = chunk.height;
         // Render binary hex text
         let hex_text: Vec<_> = self
             .buffer
@@ -166,7 +167,7 @@ impl<'a> BinExplorer<'a> {
                 let formatted = format_binary(c);
                 Text::raw(formatted)
             })
-            .take(10)
+            .take(nlines as usize)
             .collect();
 
         Paragraph::new(hex_text.iter())
