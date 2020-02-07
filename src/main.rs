@@ -81,22 +81,44 @@ impl TryFrom<char> for ParseChar {
     }
 }
 
+impl From<&ParseChar> for char {
+    fn from(pc: &ParseChar) -> char {
+        match pc {
+            ParseChar::I8 => 'b',
+            ParseChar::U8 => 'B',
+            ParseChar::Bool => '?',
+            ParseChar::I16 => 'h',
+            ParseChar::U16 => 'H',
+            ParseChar::I32 => 'i',
+            ParseChar::U32 => 'I',
+            ParseChar::I64 => 'l',
+            ParseChar::U64 => 'L',
+        }
+    }
+}
+
 struct BinExplorer {
-    instructions: String,
+    instructions: Vec<ParseChar>,
     should_quit: bool,
 }
 
 impl BinExplorer {
     fn new() -> Self {
         Self {
-            instructions: String::new(),
+            instructions: Vec::new(),
             should_quit: false,
         }
     }
 
     fn handle_key(&mut self, key: char) {
         if let Ok(ins) = ParseChar::try_from(key) {
-            todo!("{:?}", ins);
+            self.instructions.push(ins);
+        }
+    }
+
+    fn handle_backspace(&mut self) {
+        if !self.instructions.is_empty() {
+            self.instructions.pop();
         }
     }
 
@@ -115,12 +137,21 @@ impl BinExplorer {
             .render(&mut f, chunk);
     }
 
-    // fn render_editor(&mut self) {
-    //     Block::default()
-    //         .title("Editor")
-    //         .borders(Borders::ALL)
-    //         .render(&mut f, chunks[2]);
-    // }
+    fn render_editor<B: Backend>(
+        &mut self,
+        mut f: &mut tui::terminal::Frame<'_, B>,
+        chunk: tui::layout::Rect,
+    ) {
+        let text = [Text::raw(self.instructions_string())];
+
+        Paragraph::new(text.iter())
+            .block(Block::default().title("Editor").borders(Borders::ALL))
+            .render(&mut f, chunk);
+    }
+
+    fn instructions_string(&self) -> String {
+        self.instructions.iter().map(|p| char::from(p)).collect()
+    }
 }
 
 fn main() -> Result<()> {
@@ -130,12 +161,13 @@ fn main() -> Result<()> {
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
 
-    let _raw = RawMode::new()?;
     let mut stdout = stdout();
     execute!(stdout, EnterAlternateScreen)?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+
+    let _raw = RawMode::new()?;
     terminal.hide_cursor()?;
 
     let (tx, rx) = mpsc::channel();
@@ -181,36 +213,23 @@ fn main() -> Result<()> {
                 .render(&mut f, chunks[0]);
 
             app.render_parsed(&mut f, chunks[1]);
-            // app.render_editor(&mut f, chunks[2]);
+            app.render_editor(&mut f, chunks[2]);
         })?;
 
         match rx.recv()? {
             Event::Input(event) => match event.code {
-                // Supported keys:
-                //
-                // - q: quit
-                // - b: i8
-                // - B: u8
-                // - ?: bool
-                // - h: i16
-                // - H: u16
-                // - i: i32
-                // - I: u32
-                // - l: i64
-                // - L: u64
                 KeyCode::Char('q') => {
                     // TODO: why does this not work? execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
                     terminal.show_cursor()?;
                     break;
                 }
                 KeyCode::Char(c) => app.handle_key(c),
+                KeyCode::Backspace => app.handle_backspace(),
                 _ => {}
             },
             Event::Tick => {}
         }
     }
-
-    disable_raw_mode()?;
 
     Ok(())
 }
