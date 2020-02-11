@@ -17,6 +17,7 @@ use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
+use nom::{branch::alt, bytes::complete::tag, character::complete, multi::many0, IResult};
 use structopt::StructOpt;
 use tui::widgets::*;
 use tui::{
@@ -51,7 +52,7 @@ impl Drop for RawMode {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum ParseChar {
     I8,
     U8,
@@ -115,6 +116,22 @@ impl From<&ParseChar> for char {
             ParseChar::I64 => 'l',
             ParseChar::U64 => 'L',
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+struct MultipleParseChar {
+    count: usize,
+    c: ParseChar,
+}
+
+impl MultipleParseChar {
+    fn single(c: ParseChar) -> Self {
+        Self { count: 1, c }
+    }
+
+    fn many(c: ParseChar, count: usize) -> Self {
+        Self { count, c }
     }
 }
 
@@ -331,8 +348,29 @@ fn format_binary(data: &[u8]) -> String {
     sections
 }
 
-fn parse(text: &str) -> Option<Vec<ParseChar>> {
-    None
+fn parse(input: &str) -> IResult<&str, Vec<MultipleParseChar>> {
+    many0(parse_multiple)(input)
+}
+
+fn parse_i8(input: &str) -> IResult<&str, ParseChar> {
+    let (input, _) = tag("b")(input)?;
+    Ok((input, ParseChar::I8))
+}
+
+fn parse_u8(input: &str) -> IResult<&str, ParseChar> {
+    let (input, _) = tag("B")(input)?;
+    Ok((input, ParseChar::U8))
+}
+
+fn parse_multiple(input: &str) -> IResult<&str, MultipleParseChar> {
+    let (input, n_txt) = complete::digit0(input)?;
+    let (input, pc) = alt((parse_i8, parse_u8))(input)?;
+
+    if let Ok(n) = n_txt.parse() {
+        Ok((input, MultipleParseChar::many(pc, n)))
+    } else {
+        Ok((input, MultipleParseChar::single(pc)))
+    }
 }
 
 #[cfg(test)]
@@ -348,16 +386,37 @@ mod tests {
     }
 
     #[test]
-    fn test_parsing_input() {
-        let inputs = vec!["BBB"];
-        let outputs = inputs.iter().map(|i| parse(i).unwrap());
-        let expected: Vec<Vec<ParseChar>> = vec![vec![ParseChar::U8, ParseChar::U8, ParseChar::U8]];
+    fn test_parse_i8() {
+        let input = "b";
+        let (_, output) = parse_i8(input).unwrap();
+        assert_eq!(output, ParseChar::I8);
+    }
 
-        assert_eq!(inputs.len(), expected.len());
-        assert_eq!(inputs.len(), outputs.len());
+    #[test]
+    fn test_parse_u8() {
+        let input = "B";
+        let (_, output) = parse_u8(input).unwrap();
+        assert_eq!(output, ParseChar::U8);
+    }
 
-        for (op, ex) in outputs.zip(expected.iter()) {
-            assert_eq!(op, *ex);
-        }
+    #[test]
+    fn test_parse_multiple_u8() {
+        let input = "5B";
+        let (_, output) = parse_multiple(input).unwrap();
+        assert_eq!(output, MultipleParseChar::many(ParseChar::U8, 5));
+    }
+
+    #[test]
+    fn test_parse_multiple_instructions() {
+        let input = "5b2Bb";
+        let (_, output) = parse(input).unwrap();
+        assert_eq!(
+            output,
+            vec![
+                MultipleParseChar::many(ParseChar::I8, 5),
+                MultipleParseChar::many(ParseChar::U8, 2),
+                MultipleParseChar::single(ParseChar::I8),
+            ]
+        );
     }
 }
