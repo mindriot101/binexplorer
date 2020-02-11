@@ -51,7 +51,7 @@ impl Drop for RawMode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum ParseChar {
     I8,
     U8,
@@ -331,6 +331,10 @@ fn format_binary(data: &[u8]) -> String {
     sections
 }
 
+fn parse(text: &str) -> Option<Vec<ParseChar>> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,5 +345,19 @@ mod tests {
         let expected = "7f45 4c46 0201 0100 0000 0000 0000 0000\n".to_string();
 
         assert_eq!(format_binary(data), expected);
+    }
+
+    #[test]
+    fn test_parsing_input() {
+        let inputs = vec!["BBB"];
+        let outputs = inputs.iter().map(|i| parse(i).unwrap());
+        let expected: Vec<Vec<ParseChar>> = vec![vec![ParseChar::U8, ParseChar::U8, ParseChar::U8]];
+
+        assert_eq!(inputs.len(), expected.len());
+        assert_eq!(inputs.len(), outputs.len());
+
+        for (op, ex) in outputs.zip(expected.iter()) {
+            assert_eq!(op, *ex);
+        }
     }
 }
