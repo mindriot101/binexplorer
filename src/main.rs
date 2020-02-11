@@ -56,50 +56,46 @@ impl Drop for RawMode {
 enum ParseChar {
     I8,
     U8,
-    Bool,
-    I16,
-    U16,
-    I32,
-    U32,
-    I64,
-    U64,
+    // Bool,
+    // I16,
+    // U16,
+    // I32,
+    // U32,
+    // I64,
+    // U64,
 }
 
-impl ParseChar {
+impl MultipleParseChar {
     fn take_from<R>(&self, mut buf: R) -> Result<String>
     where
         R: ReadBytesExt,
     {
-        match *self {
-            ParseChar::I8 => Ok(format!("{}", buf.read_i8()?)),
-            ParseChar::U8 => Ok(format!("{}", buf.read_u8()?)),
-            ParseChar::Bool => Ok(format!("{}", buf.read_u8()?)),
-            ParseChar::I16 => Ok(format!("{}", buf.read_i16::<NativeEndian>()?)),
-            ParseChar::U16 => Ok(format!("{}", buf.read_u16::<NativeEndian>()?)),
-            ParseChar::I32 => Ok(format!("{}", buf.read_i32::<NativeEndian>()?)),
-            ParseChar::U32 => Ok(format!("{}", buf.read_u32::<NativeEndian>()?)),
-            ParseChar::I64 => Ok(format!("{}", buf.read_i64::<NativeEndian>()?)),
-            ParseChar::U64 => Ok(format!("{}", buf.read_u64::<NativeEndian>()?)),
+        match self.c {
+            ParseChar::I8 => {
+                let mut out = vec![0i8; self.count];
+                buf.read_i8_into(&mut out)?;
+                Ok(out.iter().map(|c| format!("{}", c)).collect::<String>())
+            }
+            ParseChar::U8 => {
+                let mut out = vec![0u8; self.count];
+                let n = buf.read(&mut out)?;
+                if n != self.count {
+                    return Err(anyhow!("not enough bytes read, {} != {}", n, self.count));
+                }
+                Ok(out.iter().map(|c| format!("{}", c)).collect::<String>())
+            }
         }
-    }
-}
-
-impl TryFrom<char> for ParseChar {
-    type Error = Error;
-
-    fn try_from(c: char) -> Result<Self, Self::Error> {
-        match c {
-            'b' => Ok(ParseChar::I8),
-            'B' => Ok(ParseChar::U8),
-            '?' => Ok(ParseChar::Bool),
-            'h' => Ok(ParseChar::I16),
-            'H' => Ok(ParseChar::U16),
-            'i' => Ok(ParseChar::I32),
-            'I' => Ok(ParseChar::U32),
-            'l' => Ok(ParseChar::I64),
-            'L' => Ok(ParseChar::U64),
-            _ => Err(anyhow!("invalid char {}", c)),
-        }
+        // match *self {
+        //     ParseChar::I8 => Ok(format!("{}", buf.read_i8()?)),
+        //     ParseChar::U8 => Ok(format!("{}", buf.read_u8()?)),
+        //     ParseChar::Bool => Ok(format!("{}", buf.read_u8()?)),
+        //     ParseChar::I16 => Ok(format!("{}", buf.read_i16::<NativeEndian>()?)),
+        //     ParseChar::U16 => Ok(format!("{}", buf.read_u16::<NativeEndian>()?)),
+        //     ParseChar::I32 => Ok(format!("{}", buf.read_i32::<NativeEndian>()?)),
+        //     ParseChar::U32 => Ok(format!("{}", buf.read_u32::<NativeEndian>()?)),
+        //     ParseChar::I64 => Ok(format!("{}", buf.read_i64::<NativeEndian>()?)),
+        //     ParseChar::U64 => Ok(format!("{}", buf.read_u64::<NativeEndian>()?)),
+        // }
     }
 }
 
@@ -108,13 +104,13 @@ impl From<&ParseChar> for char {
         match pc {
             ParseChar::I8 => 'b',
             ParseChar::U8 => 'B',
-            ParseChar::Bool => '?',
-            ParseChar::I16 => 'h',
-            ParseChar::U16 => 'H',
-            ParseChar::I32 => 'i',
-            ParseChar::U32 => 'I',
-            ParseChar::I64 => 'l',
-            ParseChar::U64 => 'L',
+            // ParseChar::Bool => '?',
+            // ParseChar::I16 => 'h',
+            // ParseChar::U16 => 'H',
+            // ParseChar::I32 => 'i',
+            // ParseChar::U32 => 'I',
+            // ParseChar::I64 => 'l',
+            // ParseChar::U64 => 'L',
         }
     }
 }
@@ -138,7 +134,8 @@ impl MultipleParseChar {
 #[derive(Debug)]
 struct BinExplorer<'a> {
     buffer: &'a [u8],
-    instructions: Vec<ParseChar>,
+    instructions: Vec<MultipleParseChar>,
+    raw_instructions: String,
     should_quit: bool,
 }
 
@@ -148,15 +145,15 @@ impl<'a> BinExplorer<'a> {
             buffer,
             instructions: Vec::new(),
             should_quit: false,
+            raw_instructions: String::new(),
         }
     }
 
     fn handle_key(&mut self, key: char) {
         log::debug!("key {} pressed", key);
-        if let Ok(ins) = ParseChar::try_from(key) {
-            log::debug!("key parse ok: {:?}", ins);
-            self.instructions.push(ins);
-        }
+        self.raw_instructions.push(key);
+        let (_, instructions) = parse(&self.raw_instructions).unwrap();
+        self.instructions = instructions;
     }
 
     fn handle_backspace(&mut self) {
@@ -164,6 +161,7 @@ impl<'a> BinExplorer<'a> {
         if !self.instructions.is_empty() {
             self.instructions.pop();
         }
+        // TODO: re-create raw-instructions
     }
 
     fn render_raw<B: backend::Backend>(
@@ -209,7 +207,7 @@ impl<'a> BinExplorer<'a> {
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
     ) {
-        let s = self.instructions_string();
+        let s = &self.raw_instructions;
         log::debug!("rendering instructions string: {:?}", s);
         let text = [Text::raw(s)];
 
@@ -226,10 +224,6 @@ impl<'a> BinExplorer<'a> {
             .map(|i| i.take_from(&mut cursor).unwrap())
             .collect::<Vec<String>>()
             .join(" ")
-    }
-
-    fn instructions_string(&self) -> String {
-        self.instructions.iter().map(|p| char::from(p)).collect()
     }
 }
 
