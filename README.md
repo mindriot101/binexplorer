@@ -1,5 +1,7 @@
 # Binexplorer
 
+![Rust](https://github.com/mindriot101/binexplorer/workflows/Rust/badge.svg)
+
 For exploring (and attempting to parse) binary files
 
 ![Overview](./.readme/overview.png)
