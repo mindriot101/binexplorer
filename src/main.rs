@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{stdout, Cursor, Read, Write};
 use std::path::PathBuf;
@@ -6,8 +5,8 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{anyhow, Error, Result};
-use byteorder::{NativeEndian, ReadBytesExt};
+use anyhow::{anyhow, Result};
+use byteorder::ReadBytesExt;
 use crossterm::{
     event::{self, Event as CEvent, KeyCode},
     execute,
