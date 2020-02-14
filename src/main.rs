@@ -64,40 +64,6 @@ enum ParseChar {
     // U64,
 }
 
-impl MultipleParseChar {
-    fn take_from<R>(&self, mut buf: R) -> Result<String>
-    where
-        R: ReadBytesExt,
-    {
-        match self.c {
-            ParseChar::I8 => {
-                let mut out = vec![0i8; self.count];
-                buf.read_i8_into(&mut out)?;
-                Ok(out.iter().map(|c| format!("{}", c)).collect::<String>())
-            }
-            ParseChar::U8 => {
-                let mut out = vec![0u8; self.count];
-                let n = buf.read(&mut out)?;
-                if n != self.count {
-                    return Err(anyhow!("not enough bytes read, {} != {}", n, self.count));
-                }
-                Ok(out.iter().map(|c| format!("{}", c)).collect::<String>())
-            }
-        }
-        // match *self {
-        //     ParseChar::I8 => Ok(format!("{}", buf.read_i8()?)),
-        //     ParseChar::U8 => Ok(format!("{}", buf.read_u8()?)),
-        //     ParseChar::Bool => Ok(format!("{}", buf.read_u8()?)),
-        //     ParseChar::I16 => Ok(format!("{}", buf.read_i16::<NativeEndian>()?)),
-        //     ParseChar::U16 => Ok(format!("{}", buf.read_u16::<NativeEndian>()?)),
-        //     ParseChar::I32 => Ok(format!("{}", buf.read_i32::<NativeEndian>()?)),
-        //     ParseChar::U32 => Ok(format!("{}", buf.read_u32::<NativeEndian>()?)),
-        //     ParseChar::I64 => Ok(format!("{}", buf.read_i64::<NativeEndian>()?)),
-        //     ParseChar::U64 => Ok(format!("{}", buf.read_u64::<NativeEndian>()?)),
-        // }
-    }
-}
-
 impl From<&ParseChar> for char {
     fn from(pc: &ParseChar) -> char {
         match pc {
@@ -127,6 +93,45 @@ impl MultipleParseChar {
 
     fn many(c: ParseChar, count: usize) -> Self {
         Self { count, c }
+    }
+
+    fn to_str(&self) -> String {
+        if self.count > 1 {
+            format!("{}{}", self.count, char::from(&self.c))
+        } else {
+            format!("{}", char::from(&self.c))
+        }
+    }
+}
+
+impl MultipleParseChar {
+    fn take_from<R>(&self, mut buf: R) -> Result<String>
+    where
+        R: ReadBytesExt,
+    {
+        match self.c {
+            ParseChar::I8 => {
+                let mut out = vec![0i8; self.count];
+                buf.read_i8_into(&mut out)?;
+                Ok(out
+                    .iter()
+                    .map(|c| format!("{}", c))
+                    .collect::<Vec<_>>()
+                    .join(" "))
+            }
+            ParseChar::U8 => {
+                let mut out = vec![0u8; self.count];
+                let n = buf.read(&mut out)?;
+                if n != self.count {
+                    return Err(anyhow!("not enough bytes read, {} != {}", n, self.count));
+                }
+                Ok(out
+                    .iter()
+                    .map(|c| format!("{}", c))
+                    .collect::<Vec<_>>()
+                    .join(" "))
+            }
+        }
     }
 }
 
@@ -160,7 +165,11 @@ impl<'a> BinExplorer<'a> {
         if !self.instructions.is_empty() {
             self.instructions.pop();
         }
-        // TODO: re-create raw-instructions
+        self.raw_instructions = self
+            .instructions
+            .iter()
+            .map(MultipleParseChar::to_str)
+            .collect();
     }
 
     fn render_raw<B: backend::Backend>(
