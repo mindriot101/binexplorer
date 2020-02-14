@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use byteorder::ReadBytesExt;
+use byteorder::{NativeEndian, ReadBytesExt};
 use crossterm::{
     event::{self, Event as CEvent, KeyCode},
     execute,
@@ -56,8 +56,8 @@ enum ParseChar {
     I8,
     U8,
     // Bool,
-    // I16,
-    // U16,
+    I16,
+    U16,
     // I32,
     // U32,
     // I64,
@@ -70,8 +70,8 @@ impl From<&ParseChar> for char {
             ParseChar::I8 => 'b',
             ParseChar::U8 => 'B',
             // ParseChar::Bool => '?',
-            // ParseChar::I16 => 'h',
-            // ParseChar::U16 => 'H',
+            ParseChar::I16 => 'h',
+            ParseChar::U16 => 'H',
             // ParseChar::I32 => 'i',
             // ParseChar::U32 => 'I',
             // ParseChar::I64 => 'l',
@@ -125,6 +125,24 @@ impl MultipleParseChar {
                 if n != self.count {
                     return Err(anyhow!("not enough bytes read, {} != {}", n, self.count));
                 }
+                Ok(out
+                    .iter()
+                    .map(|c| format!("{}", c))
+                    .collect::<Vec<_>>()
+                    .join(" "))
+            }
+            ParseChar::I16 => {
+                let mut out = vec![0i16; self.count];
+                buf.read_i16_into::<NativeEndian>(&mut out)?;
+                Ok(out
+                    .iter()
+                    .map(|c| format!("{}", c))
+                    .collect::<Vec<_>>()
+                    .join(" "))
+            }
+            ParseChar::U16 => {
+                let mut out = vec![0u16; self.count];
+                buf.read_u16_into::<NativeEndian>(&mut out)?;
                 Ok(out
                     .iter()
                     .map(|c| format!("{}", c))
@@ -364,9 +382,19 @@ fn parse_u8(input: &str) -> IResult<&str, ParseChar> {
     Ok((input, ParseChar::U8))
 }
 
+fn parse_i16(input: &str) -> IResult<&str, ParseChar> {
+    let (input, _) = tag("h")(input)?;
+    Ok((input, ParseChar::I16))
+}
+
+fn parse_u16(input: &str) -> IResult<&str, ParseChar> {
+    let (input, _) = tag("H")(input)?;
+    Ok((input, ParseChar::U16))
+}
+
 fn parse_multiple(input: &str) -> IResult<&str, MultipleParseChar> {
     let (input, n_txt) = complete::digit0(input)?;
-    let (input, pc) = alt((parse_i8, parse_u8))(input)?;
+    let (input, pc) = alt((parse_i8, parse_u8, parse_i16))(input)?;
 
     if let Ok(n) = n_txt.parse() {
         Ok((input, MultipleParseChar::many(pc, n)))
@@ -399,6 +427,20 @@ mod tests {
         let input = "B";
         let (_, output) = parse_u8(input).unwrap();
         assert_eq!(output, ParseChar::U8);
+    }
+
+    #[test]
+    fn test_parse_i16() {
+        let input = "h";
+        let (_, output) = parse_i16(input).unwrap();
+        assert_eq!(output, ParseChar::I16);
+    }
+
+    #[test]
+    fn test_parse_u16() {
+        let input = "H";
+        let (_, output) = parse_u16(input).unwrap();
+        assert_eq!(output, ParseChar::U16);
     }
 
     #[test]
