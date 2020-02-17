@@ -16,7 +16,6 @@ use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use nom::{branch::alt, bytes::complete::tag, character::complete, multi::many0, IResult};
 use structopt::StructOpt;
 use tui::widgets::*;
 use tui::{
@@ -24,6 +23,8 @@ use tui::{
     layout::{Constraint, Direction, Layout},
     Terminal,
 };
+
+mod parsing;
 
 #[derive(StructOpt, Debug)]
 struct Opts {
@@ -174,7 +175,7 @@ impl<'a> BinExplorer<'a> {
     fn handle_key(&mut self, key: char) {
         log::debug!("key {} pressed", key);
         self.raw_instructions.push(key);
-        let (_, instructions) = parse(&self.raw_instructions).unwrap();
+        let instructions = parsing::parse_input(&self.raw_instructions).unwrap();
         self.instructions = instructions;
     }
 
@@ -366,6 +367,7 @@ fn format_binary(data: &[u8]) -> String {
     sections
 }
 
+/*
 fn parse(input: &str) -> IResult<&str, Vec<MultipleParseChar>> {
     many0(parse_multiple)(input)
 }
@@ -400,6 +402,7 @@ fn parse_multiple(input: &str) -> IResult<&str, MultipleParseChar> {
         Ok((input, MultipleParseChar::single(pc)))
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
@@ -411,54 +414,5 @@ mod tests {
         let expected = "7f45 4c46 0201 0100 0000 0000 0000 0000\n".to_string();
 
         assert_eq!(format_binary(data), expected);
-    }
-
-    #[test]
-    fn test_parse_i8() {
-        let input = "b";
-        let (_, output) = parse_i8(input).unwrap();
-        assert_eq!(output, ParseChar::I8);
-    }
-
-    #[test]
-    fn test_parse_u8() {
-        let input = "B";
-        let (_, output) = parse_u8(input).unwrap();
-        assert_eq!(output, ParseChar::U8);
-    }
-
-    #[test]
-    fn test_parse_i16() {
-        let input = "h";
-        let (_, output) = parse_i16(input).unwrap();
-        assert_eq!(output, ParseChar::I16);
-    }
-
-    #[test]
-    fn test_parse_u16() {
-        let input = "H";
-        let (_, output) = parse_u16(input).unwrap();
-        assert_eq!(output, ParseChar::U16);
-    }
-
-    #[test]
-    fn test_parse_multiple_u8() {
-        let input = "5B";
-        let (_, output) = parse_multiple(input).unwrap();
-        assert_eq!(output, MultipleParseChar::many(ParseChar::U8, 5));
-    }
-
-    #[test]
-    fn test_parse_multiple_instructions() {
-        let input = "5b2Bb";
-        let (_, output) = parse(input).unwrap();
-        assert_eq!(
-            output,
-            vec![
-                MultipleParseChar::many(ParseChar::I8, 5),
-                MultipleParseChar::many(ParseChar::U8, 2),
-                MultipleParseChar::single(ParseChar::I8),
-            ]
-        );
     }
 }
