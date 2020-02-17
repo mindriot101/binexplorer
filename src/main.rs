@@ -195,17 +195,15 @@ impl<'a> BinExplorer<'a> {
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
     ) {
-        let nlines = chunk.height;
-        // Render binary hex text
-        let hex_text: Vec<_> = self
-            .buffer
-            .chunks(16)
-            .map(|c| {
-                let formatted = format_binary(c);
-                Text::raw(formatted)
-            })
-            .take(nlines as usize)
-            .collect();
+        let mut reader: Box<dyn Read> = Box::new(File::open("target/release/binexplorer").unwrap());
+
+        let mut out = Cursor::new(vec![0u8; 2048]);
+
+        let mut printer = hexyl::Printer::new(&mut out, false, hexyl::BorderStyle::None, true);
+        printer.display_offset(0);
+        printer.print_all(&mut reader, None).unwrap();
+
+        let hex_text = [Text::raw(String::from_utf8(out.into_inner()).unwrap())];
 
         Paragraph::new(hex_text.iter())
             .block(Block::default().title("Binary").borders(Borders::ALL))
@@ -394,7 +392,7 @@ fn parse_u16(input: &str) -> IResult<&str, ParseChar> {
 
 fn parse_multiple(input: &str) -> IResult<&str, MultipleParseChar> {
     let (input, n_txt) = complete::digit0(input)?;
-    let (input, pc) = alt((parse_i8, parse_u8, parse_i16))(input)?;
+    let (input, pc) = alt((parse_i8, parse_u8, parse_i16, parse_u16))(input)?;
 
     if let Ok(n) = n_txt.parse() {
         Ok((input, MultipleParseChar::many(pc, n)))
