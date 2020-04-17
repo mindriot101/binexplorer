@@ -198,11 +198,8 @@ impl<'a> BinExplorer<'a> {
     ) {
         let mut reader: Box<dyn Read> = Box::new(File::open("target/release/binexplorer").unwrap());
 
+        // TODO: output the text to this buffer
         let mut out = Cursor::new(vec![0u8; 2048]);
-
-        let mut printer = hexyl::Printer::new(&mut out, false, hexyl::BorderStyle::None, true);
-        printer.display_offset(0);
-        printer.print_all(&mut reader, None).unwrap();
 
         let hex_text = [Text::raw(String::from_utf8(out.into_inner()).unwrap())];
 
