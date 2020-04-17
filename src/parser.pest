@@ -1,0 +1,11 @@
+digit = { '0' .. '9' }
+digits = @{ digit+ }
+
+I8 = { "b" }
+U8 = { "B" }
+
+multiple = { digits? ~ ( I8 | U8) }
+
+WHITESPACE = _{ " " }
+
+line = _{ multiple* }
