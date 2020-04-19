@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{stdout, Cursor, Read, Write};
+use std::io::{stdout, BufReader, Cursor, Read, Write};
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
@@ -25,6 +25,7 @@ use tui::{
 };
 
 mod parsing;
+mod presentation;
 
 #[derive(StructOpt, Debug)]
 struct Opts {
@@ -196,12 +197,15 @@ impl<'a> BinExplorer<'a> {
         mut f: &mut tui::terminal::Frame<'_, B>,
         chunk: tui::layout::Rect,
     ) {
-        let mut reader: Box<dyn Read> = Box::new(File::open("target/release/binexplorer").unwrap());
+        // let mut reader: Box<dyn Read> = Box::new(File::open("target/release/binexplorer").unwrap());
+        let file = File::open("target/release/binexplorer").unwrap();
+        let reader = BufReader::new(file);
 
         // TODO: output the text to this buffer
-        let mut out = Cursor::new(vec![0u8; 2048]);
+        let mut out = Vec::new();
+        presentation::write_formatted_binary(reader, 16, &mut out).unwrap();
 
-        let hex_text = [Text::raw(String::from_utf8(out.into_inner()).unwrap())];
+        let hex_text = [Text::raw(String::from_utf8(out).unwrap())];
 
         Paragraph::new(hex_text.iter())
             .block(Block::default().title("Binary").borders(Borders::ALL))
@@ -335,33 +339,6 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn format_binary(data: &[u8]) -> String {
-    let mut sections: String = data
-        .iter()
-        .map(|x| format!("{:02x?}", x))
-        .fold(Vec::new(), |mut acc, v| match acc.last_mut() {
-            None => {
-                acc.push(vec![v]);
-                acc
-            }
-            Some(a) => {
-                if a.len() == 1 {
-                    a.push(v);
-                    acc
-                } else {
-                    acc.push(vec![v]);
-                    acc
-                }
-            }
-        })
-        .iter()
-        .map(|pair| pair.join(""))
-        .collect::<Vec<_>>()
-        .join(" ");
-    sections.push_str("\n");
-    sections
 }
 
 /*
