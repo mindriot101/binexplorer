@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Seek, SeekFrom, Write};
 
-fn write_formatted_binary<B: BufRead + Seek, W: Write>(
+pub(crate) fn write_formatted_binary<B: BufRead + Seek, W: Write>(
     mut s: B,
     nbytes_per_row: usize,
     mut output: W,
