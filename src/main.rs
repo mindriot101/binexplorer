@@ -25,6 +25,7 @@ use tui::{
 };
 
 mod parsing;
+mod presentation;
 
 #[derive(StructOpt, Debug)]
 struct Opts {
