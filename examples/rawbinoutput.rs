@@ -1,8 +1,12 @@
 #![warn(rust_2018_idioms)]
 use std::fmt::Write;
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    mpsc::{self, TryRecvError},
+    Arc, Mutex,
+};
 use std::thread;
+use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -23,6 +27,13 @@ fn convert_to_binary(text: &[u8]) -> Result<String> {
     Ok(out)
 }
 
+#[derive(Debug)]
+enum Event {
+    Quit,
+    ScrollUp,
+    ScrollDown,
+}
+
 struct App {
     buffer: String,
 }
@@ -34,26 +45,38 @@ impl App {
         let backend = TermionBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
         let mut running = true;
+        let mut scroll = 0;
 
-        let quit = Arc::new(Mutex::new(false));
-
-        let quitter = quit.clone();
+        let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
             let stdin = io::stdin();
             for event in stdin.keys() {
-                if let Ok(_) = event {
-                    let mut quit = quitter.lock().unwrap();
-                    *quit = true;
+                if let Ok(key) = event {
+                    if key == Key::Char('q') {
+                        tx.send(Event::Quit).unwrap();
+                    } else if key == Key::Up {
+                        tx.send(Event::ScrollUp).unwrap();
+                    } else if key == Key::Down {
+                        tx.send(Event::ScrollDown).unwrap();
+                    }
                 }
             }
         });
 
         loop {
-            let quit = quit.lock().unwrap();
-            if *quit {
+            if !running {
                 break;
             }
-            drop(quit);
+
+            loop {
+                match rx.try_recv() {
+                    Ok(Event::Quit) => running = false,
+                    Ok(Event::ScrollUp) => scroll = if scroll == 0 { 0 } else { scroll - 1 },
+                    Ok(Event::ScrollDown) => scroll += 1,
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => panic!("events channel disconnected"),
+                }
+            }
 
             terminal.draw(|f| {
                 let size = f.size();
@@ -75,7 +98,8 @@ impl App {
                     .style(Style::default())
                     .block(create_block("text"))
                     .alignment(Alignment::Left)
-                    .wrap(Wrap { trim: true });
+                    .wrap(Wrap { trim: true })
+                    .scroll((scroll, 0));
                 f.render_widget(paragraph, chunks[0]);
             })?;
         }
